@@ -1,40 +1,59 @@
-import altair as alt
-import numpy as np
-import pandas as pd
 import streamlit as st
+import pytesseract
+import openai
+import pdfplumber
 
-"""
-# Welcome to Streamlit!
+# Configuration de l'API OpenAI
+openai.api_key = st.secrets["openai_secret_key"]
 
-Edit `/streamlit_app.py` to customize this app to your heart's desire :heart:.
-If you have any questions, checkout our [documentation](https://docs.streamlit.io) and [community
-forums](https://discuss.streamlit.io).
+# Fonction pour extraire du texte à partir d'un PDF
+def extract_data_from_pdf(pdf_file):
+    text = ""
+    with pdfplumber.open(pdf_file) as pdf:
+        for page in pdf.pages:
+            text += page.extract_text()
+    return text
 
-In the meantime, below is an example of what you can do with just a few lines of code:
-"""
+# Fonction de comparaison entre le CRA et la Facture
+def compare_cra_and_invoice(cra_data, invoice_data, hourly_rate):
+    cra_hours = sum([float(hour) for hour in cra_data.split() if hour.replace('.', '', 1).isdigit()])
+    invoice_amount = float(invoice_data.split()[0])  # Assumons que le montant est le premier nombre trouvé dans la facture
+    expected_amount = cra_hours * hourly_rate
 
-num_points = st.slider("Number of points in spiral", 1, 10000, 1100)
-num_turns = st.slider("Number of turns in spiral", 1, 300, 31)
+    if invoice_amount == expected_amount:
+        return "Les données sont cohérentes."
+    else:
+        return f"Incohérence détectée : Facture de {invoice_amount} € au lieu de {expected_amount} €."
 
-indices = np.linspace(0, 1, num_points)
-theta = 2 * np.pi * num_turns * indices
-radius = indices
+# Fonction pour générer des suggestions en cas d'incohérence
+def generate_suggestions(error_message):
+    response = openai.Completion.create(
+        engine="text-davinci-003",
+        prompt=f"Voici une erreur : {error_message}. Propose une solution.",
+        max_tokens=50
+    )
+    return response.choices[0].text.strip()
 
-x = radius * np.cos(theta)
-y = radius * np.sin(theta)
+# Interface Streamlit
+st.title("Vérification CRA et Factures")
 
-df = pd.DataFrame({
-    "x": x,
-    "y": y,
-    "idx": indices,
-    "rand": np.random.randn(num_points),
-})
+# Formulaire de téléchargement des fichiers
+cra_file = st.file_uploader("Téléchargez le CRA (en PDF)")
+invoice_file = st.file_uploader("Téléchargez la Facture (en PDF)")
 
-st.altair_chart(alt.Chart(df, height=700, width=700)
-    .mark_point(filled=True)
-    .encode(
-        x=alt.X("x", axis=None),
-        y=alt.Y("y", axis=None),
-        color=alt.Color("idx", legend=None, scale=alt.Scale()),
-        size=alt.Size("rand", legend=None, scale=alt.Scale(range=[1, 150])),
-    ))
+# Saisie du taux horaire
+hourly_rate = st.number_input("Taux horaire du consultant (€)", min_value=0.0, step=0.01)
+
+if cra_file and invoice_file:
+    # Extraire les données des fichiers PDF
+    cra_data = extract_data_from_pdf(cra_file)
+    invoice_data = extract_data_from_pdf(invoice_file)
+
+    # Comparer le CRA et la facture
+    result = compare_cra_and_invoice(cra_data, invoice_data, hourly_rate)
+    st.write(result)
+
+    # Si une incohérence est détectée, générer une suggestion
+    if "Incohérence détectée" in result:
+        suggestion = generate_suggestions(result)
+        st.write("Suggestion : ", suggestion)
