@@ -15,30 +15,30 @@ def extract_data_from_pdf(pdf_file):
             text += page.extract_text()
     return text
 
-# Fonction pour extraire automatiquement le TJM à partir du texte d'une facture ou d'un CRA
+# Fonction pour extraire automatiquement le TJM à partir du texte d'une facture
 def extract_tjm(text):
-    # Cherche un pattern où le TJM est mentionné (ex: "TJM: 500€")
-    match = re.search(r"TJM\s*[:\-]?\s*(\d+)", text)
+    # Cherche le motif qui correspond à "PU HT" suivi d'un montant
+    match = re.search(r"PU HT\s*[:\-]?\s*(\d+)\s*€", text)
     if match:
         return float(match.group(1))
     return None
 
 # Fonction de comparaison entre le CRA et la Facture
 def compare_cra_and_invoice(cra_data, invoice_data):
-    # Extraction du TJM à partir des données de la facture ou du CRA
-    tjm = extract_tjm(invoice_data) or extract_tjm(cra_data)
+    # Extraction du TJM à partir des données de la facture
+    tjm = extract_tjm(invoice_data)
     
     if tjm is None:
         return "Impossible de trouver le TJM dans les documents fournis."
 
-    # Extraction des heures travaillées dans le CRA
-    cra_hours = sum([float(hour) for hour in cra_data.split() if hour.replace('.', '', 1).isdigit()])
+    # Extraction des jours travaillés dans le CRA
+    cra_days = sum([float(day) for day in cra_data.split() if day.replace('.', '', 1).isdigit()])
 
     # Extraction du montant de la facture
     invoice_amount = None
     for word in invoice_data.split():
         try:
-            invoice_amount = float(word)
+            invoice_amount = float(word.replace('€', '').replace(',', '').strip())
             break
         except ValueError:
             continue
@@ -47,7 +47,7 @@ def compare_cra_and_invoice(cra_data, invoice_data):
         return "Impossible de trouver le montant de la facture."
 
     # Calcul du montant attendu
-    expected_amount = cra_hours * tjm
+    expected_amount = cra_days * tjm
 
     if invoice_amount == expected_amount:
         return "Les données sont cohérentes."
