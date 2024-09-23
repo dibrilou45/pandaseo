@@ -1,8 +1,6 @@
 import streamlit as st
-import pytesseract
 import openai
 import pdfplumber
-import re
 
 # Configuration de l'API OpenAI
 openai.api_key = st.secrets["openai_secret_key"]
@@ -40,14 +38,17 @@ def compare_cra_and_invoice(cra_data, invoice_data, tjm):
     else:
         return f"Incohérence détectée : Facture de {invoice_amount} € au lieu de {expected_amount} €."
 
-# Fonction pour générer des suggestions en cas d'incohérence
+# Fonction pour générer des suggestions en cas d'incohérence, en utilisant GPT-4-turbo-mini
 def generate_suggestions(error_message):
-    response = openai.Completion.create(
-        engine="text-davinci-003",
-        prompt=f"Voici une erreur : {error_message}. Propose une solution.",
+    response = openai.ChatCompletion.create(
+        model="gpt-4-turbo",  # Utilise le modèle GPT-4-mini ou turbo selon la configuration
+        messages=[
+            {"role": "system", "content": "You are an assistant that provides suggestions for fixing errors in invoice comparisons."},
+            {"role": "user", "content": f"Voici une erreur : {error_message}. Propose une solution."}
+        ],
         max_tokens=50
     )
-    return response.choices[0].text.strip()
+    return response['choices'][0]['message']['content'].strip()
 
 # Interface Streamlit
 st.title("Vérification CRA et Factures")
