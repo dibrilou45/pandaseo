@@ -15,22 +15,8 @@ def extract_data_from_pdf(pdf_file):
             text += page.extract_text()
     return text
 
-# Fonction pour extraire automatiquement le TJM à partir du texte d'une facture
-def extract_tjm(text):
-    # Cherche le motif qui correspond à "PU HT" suivi d'un montant
-    match = re.search(r"PU HT\s*[:\-]?\s*(\d+)\s*€", text)
-    if match:
-        return float(match.group(1))
-    return None
-
 # Fonction de comparaison entre le CRA et la Facture
-def compare_cra_and_invoice(cra_data, invoice_data):
-    # Extraction du TJM à partir des données de la facture
-    tjm = extract_tjm(invoice_data)
-    
-    if tjm is None:
-        return "Impossible de trouver le TJM dans les documents fournis."
-
+def compare_cra_and_invoice(cra_data, invoice_data, tjm):
     # Extraction des jours travaillés dans le CRA
     cra_days = sum([float(day) for day in cra_data.split() if day.replace('.', '', 1).isdigit()])
 
@@ -70,13 +56,16 @@ st.title("Vérification CRA et Factures")
 cra_file = st.file_uploader("Téléchargez le CRA (en PDF)")
 invoice_file = st.file_uploader("Téléchargez la Facture (en PDF)")
 
-if cra_file and invoice_file:
+# Champ pour saisir le TJM
+tjm = st.number_input("Entrez le TJM (en €)", min_value=0.0, step=0.01)
+
+if cra_file and invoice_file and tjm > 0:
     # Extraire les données des fichiers PDF
     cra_data = extract_data_from_pdf(cra_file)
     invoice_data = extract_data_from_pdf(invoice_file)
 
     # Comparer le CRA et la facture
-    result = compare_cra_and_invoice(cra_data, invoice_data)
+    result = compare_cra_and_invoice(cra_data, invoice_data, tjm)
     st.write(result)
 
     # Si une incohérence est détectée, générer une suggestion
