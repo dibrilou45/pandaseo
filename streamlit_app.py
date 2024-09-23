@@ -2,6 +2,7 @@ import streamlit as st
 import pytesseract
 import openai
 import pdfplumber
+import re
 
 # Configuration de l'API OpenAI
 openai.api_key = st.secrets["openai_secret_key"]
@@ -14,11 +15,39 @@ def extract_data_from_pdf(pdf_file):
             text += page.extract_text()
     return text
 
+# Fonction pour extraire automatiquement le TJM à partir du texte d'une facture ou d'un CRA
+def extract_tjm(text):
+    # Cherche un pattern où le TJM est mentionné (ex: "TJM: 500€")
+    match = re.search(r"TJM\s*[:\-]?\s*(\d+)", text)
+    if match:
+        return float(match.group(1))
+    return None
+
 # Fonction de comparaison entre le CRA et la Facture
-def compare_cra_and_invoice(cra_data, invoice_data, hourly_rate):
+def compare_cra_and_invoice(cra_data, invoice_data):
+    # Extraction du TJM à partir des données de la facture ou du CRA
+    tjm = extract_tjm(invoice_data) or extract_tjm(cra_data)
+    
+    if tjm is None:
+        return "Impossible de trouver le TJM dans les documents fournis."
+
+    # Extraction des heures travaillées dans le CRA
     cra_hours = sum([float(hour) for hour in cra_data.split() if hour.replace('.', '', 1).isdigit()])
-    invoice_amount = float(invoice_data.split()[0])  # Assumons que le montant est le premier nombre trouvé dans la facture
-    expected_amount = cra_hours * hourly_rate
+
+    # Extraction du montant de la facture
+    invoice_amount = None
+    for word in invoice_data.split():
+        try:
+            invoice_amount = float(word)
+            break
+        except ValueError:
+            continue
+    
+    if invoice_amount is None:
+        return "Impossible de trouver le montant de la facture."
+
+    # Calcul du montant attendu
+    expected_amount = cra_hours * tjm
 
     if invoice_amount == expected_amount:
         return "Les données sont cohérentes."
@@ -41,16 +70,13 @@ st.title("Vérification CRA et Factures")
 cra_file = st.file_uploader("Téléchargez le CRA (en PDF)")
 invoice_file = st.file_uploader("Téléchargez la Facture (en PDF)")
 
-# Saisie du taux horaire
-hourly_rate = st.number_input("Taux horaire du consultant (€)", min_value=0.0, step=0.01)
-
 if cra_file and invoice_file:
     # Extraire les données des fichiers PDF
     cra_data = extract_data_from_pdf(cra_file)
     invoice_data = extract_data_from_pdf(invoice_file)
 
     # Comparer le CRA et la facture
-    result = compare_cra_and_invoice(cra_data, invoice_data, hourly_rate)
+    result = compare_cra_and_invoice(cra_data, invoice_data)
     st.write(result)
 
     # Si une incohérence est détectée, générer une suggestion
