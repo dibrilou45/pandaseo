@@ -108,7 +108,7 @@ elif st.session_state.step == 4:
     if st.button("Suivant"):
         next_step()
 
-# Étape 5 : Résumé et génération des résultats
+# Étape 5 : Résumé et instructions fiscales
 elif st.session_state.step == 5:
     st.header("Étape 5 : Résumé de vos informations")
     st.write(help_text(5))
@@ -126,7 +126,7 @@ elif st.session_state.step == 5:
                       st.session_state.data['taxes'])
     
     if st.session_state.data['fiscal_regime'] == 'Régime réel':
-        # Amortissement simplifié : pas nécessaire d'expliquer aux utilisateurs
+        # Amortissement simplifié
         amortissement = st.session_state.data['purchase_price'] / 30  # Amortissement sur 30 ans
         net_profit = total_income - total_expenses - amortissement
         st.write(f"Votre bien peut avoir un amortissement annuel de : {amortissement:.2f} €.")
@@ -134,6 +134,27 @@ elif st.session_state.step == 5:
         net_profit = total_income - total_expenses
     
     st.write(f"Revenus nets annuels estimés : {net_profit:.2f} €")
+
+    # Instructions fiscales
+    st.subheader("Instructions pour votre déclaration d'impôts")
+    st.write("Voici où vous devez entrer ces informations sur votre déclaration d'impôts :")
+    
+    if st.session_state.data['fiscal_regime'] == 'Régime réel':
+        st.write("1. **Revenus locatifs (Ligne 5ND)** :")
+        st.write(f"   - Indiquez vos revenus locatifs totaux pour l'année : {total_income:.2f} €")
+        st.write("2. **Dépenses (Ligne 5NR)** :")
+        st.write(f"   - Indiquez vos dépenses totales pour l'année : {total_expenses:.2f} €")
+        st.write(f"3. **Amortissement (Ligne 5NH)** :")
+        st.write(f"   - Indiquez l'amortissement que vous avez calculé : {amortissement:.2f} €")
+        st.write("4. **Bénéfice net (Ligne 5NF)** :")
+        st.write(f"   - Indiquez votre bénéfice net : {net_profit:.2f} €")
+    else:
+        st.write("1. **Revenus locatifs (Ligne 5ND)** :")
+        st.write(f"   - Indiquez vos revenus locatifs totaux pour l'année : {total_income:.2f} €")
+        st.write("2. **Dépenses (Ligne 5NR)** :")
+        st.write(f"   - Indiquez vos dépenses totales pour l'année : {total_expenses:.2f} €")
+        st.write("3. **Bénéfice net (Ligne 5NF)** :")
+        st.write(f"   - Indiquez votre bénéfice net : {net_profit:.2f} €")
     
     # Navigation
     st.button("Précédent", on_click=previous_step)
