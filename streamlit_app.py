@@ -6,7 +6,7 @@ import openai
 # pytrends = TrendReq(hl='fr-FR', tz=360)
 
 # Configuration de l'API OpenAI
-openai.api_key = st.secrets["openai_api_key"]
+openai.api_key = st.secrets["openai_secret_key"]
 
 # Fonction pour analyser la problématique et générer des mots-clés avec GPT-4o
 def analyze_problem(problem_statement):
