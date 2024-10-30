@@ -1,161 +1,128 @@
 import streamlit as st
-from datetime import datetime
-import pandas as pd
 import openai
 
-# Initialisation de la clé API OpenAI
-openai.api_key = st.secrets["openai_secret_key"]
+# Si vous utilisez pytrends (optionnel)
+# from pytrends.request import TrendReq
+# pytrends = TrendReq(hl='fr-FR', tz=360)
 
-# Titre de l'application
-st.title("Assistant Comptabilité LMNP : Guide Pas à Pas")
+# Configuration de l'API OpenAI
+openai.api_key = st.secrets["openai_api_key"]
 
-# Variables d'état pour suivre le parcours
-if 'step' not in st.session_state:
-    st.session_state.step = 1
+# Fonction pour analyser la problématique et générer des mots-clés avec GPT-4o
+def analyze_problem(problem_statement):
+    response = openai.ChatCompletion.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": "Tu es un expert en marketing digital et SEO. Analyse la problématique donnée et génère une liste de mots-clés pertinents pour le SEO."},
+            {"role": "user", "content": f"Problématique : {problem_statement}"}
+        ],
+        temperature=0.7,
+        max_tokens=500
+    )
+    keywords = response['choices'][0]['message']['content']
+    # Extraction des mots-clés
+    keywords_list = [keyword.strip() for keyword in keywords.split(',')]
+    return keywords_list
 
-# Fonction pour revenir à une étape précédente
-def previous_step():
-    if st.session_state.step > 1:
-        st.session_state.step -= 1
+# Fonction pour générer des sujets d'articles avec GPT-4o Mini
+def generate_article_topics(keywords):
+    keywords_text = ', '.join(keywords)
+    response = openai.ChatCompletion.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "Tu es un rédacteur web spécialisé en SEO. Génère une liste de 10 sujets d'articles optimisés pour le SEO basés sur les mots-clés fournis."},
+            {"role": "user", "content": f"Mots-clés : {keywords_text}"}
+        ],
+        temperature=0.7,
+        max_tokens=700
+    )
+    topics = response['choices'][0]['message']['content']
+    topics_list = topics.strip().split('\n')
+    return topics_list
 
-# Fonction pour avancer à l'étape suivante
-def next_step():
-    st.session_state.step += 1
+# Fonction pour générer une stratégie SEO avec GPT-4o
+def generate_seo_strategy(topic):
+    response = openai.ChatCompletion.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": "Tu es un expert en SEO. Pour le sujet donné, génère une stratégie SEO détaillée incluant le titre optimisé, la méta description, les mots-clés à utiliser, et des conseils sur la manière de placer les mots-clés dans l'article."},
+            {"role": "user", "content": f"Sujet : {topic}"}
+        ],
+        temperature=0.7,
+        max_tokens=700
+    )
+    strategy = response['choices'][0]['message']['content']
+    return strategy
 
-# Données collectées (dictionnaire pour stocker les réponses)
-if 'data' not in st.session_state:
-    st.session_state.data = {}
+# Fonction pour générer un article avec GPT-4o Mini
+def generate_article(topic, seo_strategy):
+    response = openai.ChatCompletion.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "Tu es un rédacteur web qui écrit des articles optimisés pour le SEO en suivant la stratégie fournie."},
+            {"role": "user", "content": f"Sujet : {topic}\n\nStratégie SEO : {seo_strategy}\n\nMerci d'écrire un article complet en respectant la stratégie ci-dessus."}
+        ],
+        temperature=0.7,
+        max_tokens=3000
+    )
+    article = response['choices'][0]['message']['content']
+    return article
 
-# Fonction d'aide pour chaque étape
-def help_text(step):
-    if step == 1:
-        return "Dans cette étape, nous allons recueillir des informations de base sur votre bien immobilier. Cela nous aidera à calculer vos revenus et vos dépenses."
-    elif step == 2:
-        return "Ici, vous devez entrer combien vous louez votre bien chaque mois, ainsi que les charges que vous facturez à vos locataires."
-    elif step == 3:
-        return "Cette étape vous demande de saisir toutes les dépenses que vous avez pour gérer votre bien, comme les frais de maintenance ou de gestion."
-    elif step == 4:
-        return "Vous devez maintenant choisir un régime fiscal. Le régime réel vous permet de déduire vos frais réels, tandis que le Micro-BIC offre une déduction forfaitaire. Choisissez celui qui vous semble le plus approprié."
-    elif step == 5:
-        return "Voici un résumé de toutes les informations que vous avez fournies. Cela vous aidera à remplir vos déclarations fiscales."
+# Interface utilisateur Streamlit
+def main():
+    st.title("Générateur d'Articles SEO")
+    st.write("Cet outil vous aide à générer des articles optimisés pour le SEO en fonction de la problématique de votre produit.")
 
-# Étape 1 : Informations sur le bien
-if st.session_state.step == 1:
-    st.header("Étape 1 : Informations sur votre bien immobilier")
-    st.write(help_text(1))
-    
-    property_type = st.selectbox("Quel type de bien possédez-vous ?", ["Appartement", "Maison", "Studio"])
-    purchase_date = st.date_input("Quand avez-vous acheté ce bien ?", value=datetime.now())
-    purchase_price = st.number_input("Quel est le prix d'achat de ce bien ? (€)", min_value=0.0, step=500.0)
-    
-    # Enregistrement des données
-    st.session_state.data['property_type'] = property_type
-    st.session_state.data['purchase_date'] = purchase_date
-    st.session_state.data['purchase_price'] = purchase_price
-    
-    # Navigation
-    if st.button("Suivant"):
-        next_step()
+    # Étape 1 : Saisie de la problématique
+    problem_statement = st.text_area("Entrez la problématique de votre produit/SaaS :", height=100)
 
-# Étape 2 : Revenus locatifs
-elif st.session_state.step == 2:
-    st.header("Étape 2 : Revenus locatifs")
-    st.write(help_text(2))
-    
-    rent_income = st.number_input("Combien louez-vous votre bien chaque mois ? (€)", min_value=0.0, step=50.0)
-    rental_charges = st.number_input("Y a-t-il des charges que vous facturez à vos locataires chaque mois ? (€)", min_value=0.0, step=10.0)
-    
-    # Enregistrement des données
-    st.session_state.data['rent_income'] = rent_income
-    st.session_state.data['rental_charges'] = rental_charges
-    
-    # Navigation
-    st.button("Précédent", on_click=previous_step)
-    if st.button("Suivant"):
-        next_step()
+    if st.button("Générer des sujets d'articles"):
+        if problem_statement.strip() != "":
+            # Étape 2 : Analyse de la problématique et génération des mots-clés
+            with st.spinner("Analyse de la problématique et génération des mots-clés..."):
+                keywords = analyze_problem(problem_statement)
+                st.subheader("Mots-clés générés :")
+                st.write(', '.join(keywords))
 
-# Étape 3 : Dépenses
-elif st.session_state.step == 3:
-    st.header("Étape 3 : Dépenses")
-    st.write(help_text(3))
-    
-    maintenance_costs = st.number_input("Quelles sont vos dépenses de maintenance annuelles ? (€)", min_value=0.0, step=50.0)
-    management_fees = st.number_input("Avez-vous des frais de gestion annuels ? (€)", min_value=0.0, step=50.0)
-    taxes = st.number_input("Quelles taxes ou impôts payez-vous pour ce bien ? (€)", min_value=0.0, step=50.0)
-    
-    # Enregistrement des données
-    st.session_state.data['maintenance_costs'] = maintenance_costs
-    st.session_state.data['management_fees'] = management_fees
-    st.session_state.data['taxes'] = taxes
-    
-    # Navigation
-    st.button("Précédent", on_click=previous_step)
-    if st.button("Suivant"):
-        next_step()
+            # Étape 3 : Génération des sujets d'articles
+            with st.spinner("Génération des sujets d'articles..."):
+                topics = generate_article_topics(keywords)
+                st.subheader("Sujets d'articles proposés :")
+                for idx, topic in enumerate(topics):
+                    st.write(f"{idx+1}. {topic}")
 
-# Étape 4 : Choix du régime fiscal
-elif st.session_state.step == 4:
-    st.header("Étape 4 : Choix du régime fiscal")
-    st.write(help_text(4))
-    
-    fiscal_regime = st.selectbox("Choisissez votre régime fiscal", ["Régime réel", "Micro-BIC"])
-    
-    # Enregistrement des données
-    st.session_state.data['fiscal_regime'] = fiscal_regime
-    
-    # Navigation
-    st.button("Précédent", on_click=previous_step)
-    if st.button("Suivant"):
-        next_step()
+            # Étape 4 : Sélection des sujets favoris
+            st.subheader("Sélectionnez les sujets que vous souhaitez développer :")
+            selected_topics = []
+            for idx, topic in enumerate(topics):
+                if st.checkbox(topic, key=idx):
+                    selected_topics.append(topic)
 
-# Étape 5 : Résumé et instructions fiscales
-elif st.session_state.step == 5:
-    st.header("Étape 5 : Résumé de vos informations")
-    st.write(help_text(5))
+            if selected_topics:
+                for topic in selected_topics:
+                    # Étape 5 : Génération de la stratégie SEO
+                    with st.spinner(f"Génération de la stratégie SEO pour : {topic}"):
+                        seo_strategy = generate_seo_strategy(topic)
+                        st.markdown(f"### Stratégie SEO pour '{topic}':")
+                        st.write(seo_strategy)
 
-    # Affichage des informations saisies
-    st.write("Voici le résumé des informations que vous avez fournies :")
-    
-    summary_df = pd.DataFrame.from_dict(st.session_state.data, orient='index', columns=['Valeur'])
-    st.dataframe(summary_df)
+                    # Étape 6 : Génération de l'article
+                    with st.spinner(f"Génération de l'article pour : {topic}"):
+                        article = generate_article(topic, seo_strategy)
+                        st.markdown(f"### Article généré pour '{topic}':")
+                        st.write(article)
 
-    # Simuler des résultats (ex. calcul d'amortissements ou bénéfices nets)
-    total_income = st.session_state.data['rent_income'] * 12
-    total_expenses = (st.session_state.data['maintenance_costs'] + 
-                      st.session_state.data['management_fees'] + 
-                      st.session_state.data['taxes'])
-    
-    if st.session_state.data['fiscal_regime'] == 'Régime réel':
-        # Amortissement simplifié
-        amortissement = st.session_state.data['purchase_price'] / 30  # Amortissement sur 30 ans
-        net_profit = total_income - total_expenses - amortissement
-        st.write(f"Votre bien peut avoir un amortissement annuel de : {amortissement:.2f} €.")
-    else:
-        net_profit = total_income - total_expenses
-    
-    st.write(f"Revenus nets annuels estimés : {net_profit:.2f} €")
+                        # Option de téléchargement
+                        st.download_button(
+                            label="Télécharger l'article",
+                            data=article,
+                            file_name=f"{topic}.txt",
+                            mime="text/plain"
+                        )
+            else:
+                st.info("Veuillez sélectionner au moins un sujet pour générer un article.")
+        else:
+            st.warning("Veuillez entrer une problématique avant de continuer.")
 
-    # Instructions fiscales
-    st.subheader("Instructions pour votre déclaration d'impôts")
-    st.write("Voici où vous devez entrer ces informations sur votre déclaration d'impôts :")
-    
-    if st.session_state.data['fiscal_regime'] == 'Régime réel':
-        st.write("1. **Revenus locatifs (Ligne 5ND)** :")
-        st.write(f"   - Indiquez vos revenus locatifs totaux pour l'année : {total_income:.2f} €")
-        st.write("2. **Dépenses (Ligne 5NR)** :")
-        st.write(f"   - Indiquez vos dépenses totales pour l'année : {total_expenses:.2f} €")
-        st.write(f"3. **Amortissement (Ligne 5NH)** :")
-        st.write(f"   - Indiquez l'amortissement que vous avez calculé : {amortissement:.2f} €")
-        st.write("4. **Bénéfice net (Ligne 5NF)** :")
-        st.write(f"   - Indiquez votre bénéfice net : {net_profit:.2f} €")
-    else:
-        st.write("1. **Revenus locatifs (Ligne 5ND)** :")
-        st.write(f"   - Indiquez vos revenus locatifs totaux pour l'année : {total_income:.2f} €")
-        st.write("2. **Dépenses (Ligne 5NR)** :")
-        st.write(f"   - Indiquez vos dépenses totales pour l'année : {total_expenses:.2f} €")
-        st.write("3. **Bénéfice net (Ligne 5NF)** :")
-        st.write(f"   - Indiquez votre bénéfice net : {net_profit:.2f} €")
-    
-    # Navigation
-    st.button("Précédent", on_click=previous_step)
-    st.button("Terminer")
+if __name__ == "__main__":
+    main()
