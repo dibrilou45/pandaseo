@@ -1,19 +1,15 @@
 import streamlit as st
 import openai
 
-# Si vous utilisez pytrends (optionnel)
-# from pytrends.request import TrendReq
-# pytrends = TrendReq(hl='fr-FR', tz=360)
-
-# Configuration de l'API OpenAI
+# Configuration de l'API OpenAI avec la clé correcte
 openai.api_key = st.secrets["openai_secret_key"]
 
-# Fonction pour analyser la problématique et générer des mots-clés avec GPT-4o
+# Fonction pour analyser la problématique et générer des mots-clés avec GPT-4
 def analyze_problem(problem_statement):
     response = openai.ChatCompletion.create(
-        model="gpt-4o",
+        model="gpt-4",  # Utilisez "gpt-4" si vous y avez accès, sinon "gpt-3.5-turbo"
         messages=[
-            {"role": "system", "content": "Tu es un expert en marketing digital et SEO. Analyse la problématique donnée et génère une liste de mots-clés pertinents pour le SEO."},
+            {"role": "system", "content": "Tu es un expert en marketing digital et SEO. Analyse la problématique donnée et génère une liste de mots-clés pertinents pour le SEO, séparés par des virgules."},
             {"role": "user", "content": f"Problématique : {problem_statement}"}
         ],
         temperature=0.7,
@@ -24,11 +20,11 @@ def analyze_problem(problem_statement):
     keywords_list = [keyword.strip() for keyword in keywords.split(',')]
     return keywords_list
 
-# Fonction pour générer des sujets d'articles avec GPT-4o Mini
+# Fonction pour générer des sujets d'articles avec GPT-3.5-turbo
 def generate_article_topics(keywords):
     keywords_text = ', '.join(keywords)
     response = openai.ChatCompletion.create(
-        model="gpt-4o-mini",
+        model="gpt-3.5-turbo",
         messages=[
             {"role": "system", "content": "Tu es un rédacteur web spécialisé en SEO. Génère une liste de 10 sujets d'articles optimisés pour le SEO basés sur les mots-clés fournis."},
             {"role": "user", "content": f"Mots-clés : {keywords_text}"}
@@ -37,13 +33,13 @@ def generate_article_topics(keywords):
         max_tokens=700
     )
     topics = response['choices'][0]['message']['content']
-    topics_list = topics.strip().split('\n')
+    topics_list = [topic.strip() for topic in topics.strip().split('\n') if topic.strip()]
     return topics_list
 
-# Fonction pour générer une stratégie SEO avec GPT-4o
+# Fonction pour générer une stratégie SEO avec GPT-4
 def generate_seo_strategy(topic):
     response = openai.ChatCompletion.create(
-        model="gpt-4o",
+        model="gpt-4",  # Utilisez "gpt-4" si possible, sinon "gpt-3.5-turbo"
         messages=[
             {"role": "system", "content": "Tu es un expert en SEO. Pour le sujet donné, génère une stratégie SEO détaillée incluant le titre optimisé, la méta description, les mots-clés à utiliser, et des conseils sur la manière de placer les mots-clés dans l'article."},
             {"role": "user", "content": f"Sujet : {topic}"}
@@ -54,10 +50,10 @@ def generate_seo_strategy(topic):
     strategy = response['choices'][0]['message']['content']
     return strategy
 
-# Fonction pour générer un article avec GPT-4o Mini
+# Fonction pour générer un article avec GPT-3.5-turbo
 def generate_article(topic, seo_strategy):
     response = openai.ChatCompletion.create(
-        model="gpt-4o-mini",
+        model="gpt-3.5-turbo",
         messages=[
             {"role": "system", "content": "Tu es un rédacteur web qui écrit des articles optimisés pour le SEO en suivant la stratégie fournie."},
             {"role": "user", "content": f"Sujet : {topic}\n\nStratégie SEO : {seo_strategy}\n\nMerci d'écrire un article complet en respectant la stratégie ci-dessus."}
