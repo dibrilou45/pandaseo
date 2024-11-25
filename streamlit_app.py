@@ -1,10 +1,9 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 from datetime import datetime, timedelta
 
 # Page title
-st.title("Team Capacity Calendar")
+st.title("Team Capacity Calendar - Baggle Pilot")
 
 # Section 1: Add team members
 st.header("Add Team Members")
@@ -27,28 +26,42 @@ if st.session_state["team"]:
     team_df = pd.DataFrame(st.session_state["team"])
     st.dataframe(team_df)
 
-# Section 2: Configure calendar
-st.header("Sprint Calendar")
-start_date = st.date_input("Sprint Start Date", value=datetime.today())
-num_sprints = st.number_input("Number of Sprints", min_value=1, max_value=10, value=2)
-sprint_length = st.number_input("Sprint Length (days)", min_value=1, max_value=30, value=15)
+# Section 2: Configure sprints manually
+st.header("Configure Sprints")
+if "sprints" not in st.session_state:
+    st.session_state["sprints"] = []
 
-# Generate sprint dates
-sprints = {}
-for i in range(num_sprints):
-    sprint_start = start_date + timedelta(days=i * sprint_length)
-    sprint_end = sprint_start + timedelta(days=sprint_length - 1)
-    sprints[f"Sprint {i+1}"] = pd.date_range(sprint_start, sprint_end)
+sprint_name = st.text_input("Sprint Name (e.g., Sprint 137)")
+start_date = st.date_input("Sprint Start Date")
+end_date = st.date_input("Sprint End Date")
+
+if st.button("Add Sprint"):
+    if start_date <= end_date:
+        st.session_state["sprints"].append({"Sprint": sprint_name, "Start Date": start_date, "End Date": end_date})
+        st.success(f"{sprint_name} added!")
+    else:
+        st.error("Start date must be before or equal to the end date.")
+
+# Display sprints
+if st.session_state["sprints"]:
+    st.subheader("Sprints")
+    sprints_df = pd.DataFrame(st.session_state["sprints"])
+    st.dataframe(sprints_df)
 
 # Section 3: Mark absences
 st.header("Mark Absences")
-if st.session_state["team"]:
+if st.session_state["team"] and st.session_state["sprints"]:
     selected_member = st.selectbox("Select Team Member", [member["Name"] for member in st.session_state["team"]])
-    selected_sprint = st.selectbox("Select Sprint", list(sprints.keys()))
-    absence_days = st.multiselect(
-        "Select Absence Days",
-        sprints[selected_sprint].strftime("%Y-%m-%d").tolist()
-    )
+    selected_sprint = st.selectbox("Select Sprint", [sprint["Sprint"] for sprint in st.session_state["sprints"]])
+    
+    # Get selected sprint dates
+    sprint_dates = [
+        date for sprint in st.session_state["sprints"] 
+        if sprint["Sprint"] == selected_sprint 
+        for date in pd.date_range(sprint["Start Date"], sprint["End Date"])
+    ]
+    absence_days = st.multiselect("Select Absence Days", [date.strftime("%Y-%m-%d") for date in sprint_dates])
+
     if st.button("Save Absences"):
         if "absences" not in st.session_state:
             st.session_state["absences"] = {}
@@ -66,17 +79,25 @@ if "absences" in st.session_state:
     )
     st.dataframe(absences_df)
 
-# Section 4: Calculate capacity
+# Section 4: Calculate sprint capacity
 st.header("Sprint Capacity")
-if st.session_state["team"] and "absences" in st.session_state:
+if st.session_state["team"] and st.session_state["sprints"]:
     capacity_summary = []
-    for sprint, dates in sprints.items():
+    for sprint in st.session_state["sprints"]:
+        sprint_name = sprint["Sprint"]
+        sprint_dates = pd.date_range(sprint["Start Date"], sprint["End Date"])
+        total_days = len(sprint_dates)
+        
+        sprint_total = 0
         for member in st.session_state["team"]:
             member_name = member["Name"]
-            total_days = len(dates)
-            absent_days = len(st.session_state["absences"].get((member_name, sprint), []))
+            absent_days = len(st.session_state["absences"].get((member_name, sprint_name), []))
             available_days = total_days - absent_days
-            capacity_summary.append({"Sprint": sprint, "Member": member_name, "Available Days": available_days})
-
+            sprint_total += available_days
+            capacity_summary.append({"Sprint": sprint_name, "Member": member_name, "Available Days": available_days})
+        
+        # Add total capacity for the sprint
+        capacity_summary.append({"Sprint": sprint_name, "Member": "TOTAL", "Available Days": sprint_total})
+    
     capacity_df = pd.DataFrame(capacity_summary)
-    st.dataframe(capacity_df)
+    st.dataframe(capacity_df[capacity_df["Member"] == "TOTAL"])
