@@ -1,124 +1,82 @@
 import streamlit as st
-import openai
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
 
-# Configuration de l'API OpenAI avec la clé correcte
-openai.api_key = st.secrets["openai_secret_key"]
+# Page title
+st.title("Team Capacity Calendar")
 
-# Fonction pour analyser la problématique et générer des mots-clés avec GPT-4
-def analyze_problem(problem_statement):
-    response = openai.ChatCompletion.create(
-        model="gpt-4",  # Utilisez "gpt-4" si vous y avez accès, sinon "gpt-3.5-turbo"
-        messages=[
-            {"role": "system", "content": "Tu es un expert en marketing digital et SEO. Analyse la problématique donnée et génère une liste de mots-clés pertinents pour le SEO, séparés par des virgules."},
-            {"role": "user", "content": f"Problématique : {problem_statement}"}
-        ],
-        temperature=0.7,
-        max_tokens=500
+# Section 1: Add team members
+st.header("Add Team Members")
+with st.form("team_form"):
+    name = st.text_input("Member Name")
+    role = st.selectbox("Role", ["TL", "Dev Front", "Dev Back", "QA"])
+    add_member = st.form_submit_button("Add Member")
+
+# Store team data
+if "team" not in st.session_state:
+    st.session_state["team"] = []
+
+if add_member and name:
+    st.session_state["team"].append({"Name": name, "Role": role})
+    st.success(f"{name} added to the team!")
+
+# Display team
+if st.session_state["team"]:
+    st.subheader("Team Members")
+    team_df = pd.DataFrame(st.session_state["team"])
+    st.dataframe(team_df)
+
+# Section 2: Configure calendar
+st.header("Sprint Calendar")
+start_date = st.date_input("Sprint Start Date", value=datetime.today())
+num_sprints = st.number_input("Number of Sprints", min_value=1, max_value=10, value=2)
+sprint_length = st.number_input("Sprint Length (days)", min_value=1, max_value=30, value=15)
+
+# Generate sprint dates
+sprints = {}
+for i in range(num_sprints):
+    sprint_start = start_date + timedelta(days=i * sprint_length)
+    sprint_end = sprint_start + timedelta(days=sprint_length - 1)
+    sprints[f"Sprint {i+1}"] = pd.date_range(sprint_start, sprint_end)
+
+# Section 3: Mark absences
+st.header("Mark Absences")
+if st.session_state["team"]:
+    selected_member = st.selectbox("Select Team Member", [member["Name"] for member in st.session_state["team"]])
+    selected_sprint = st.selectbox("Select Sprint", list(sprints.keys()))
+    absence_days = st.multiselect(
+        "Select Absence Days",
+        sprints[selected_sprint].strftime("%Y-%m-%d").tolist()
     )
-    keywords = response['choices'][0]['message']['content']
-    # Extraction des mots-clés
-    keywords_list = [keyword.strip() for keyword in keywords.split(',')]
-    return keywords_list
+    if st.button("Save Absences"):
+        if "absences" not in st.session_state:
+            st.session_state["absences"] = {}
+        st.session_state["absences"][(selected_member, selected_sprint)] = absence_days
+        st.success(f"Absences saved for {selected_member} in {selected_sprint}!")
 
-# Fonction pour générer des sujets d'articles avec GPT-3.5-turbo
-def generate_article_topics(keywords):
-    keywords_text = ', '.join(keywords)
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": "Tu es un rédacteur web spécialisé en SEO. Génère une liste de 10 sujets d'articles optimisés pour le SEO basés sur les mots-clés fournis."},
-            {"role": "user", "content": f"Mots-clés : {keywords_text}"}
-        ],
-        temperature=0.7,
-        max_tokens=700
+# Display absence summary
+if "absences" in st.session_state:
+    st.subheader("Absence Summary")
+    absences_df = pd.DataFrame(
+        [
+            {"Member": key[0], "Sprint": key[1], "Days Absent": ", ".join(value)}
+            for key, value in st.session_state["absences"].items()
+        ]
     )
-    topics = response['choices'][0]['message']['content']
-    topics_list = [topic.strip() for topic in topics.strip().split('\n') if topic.strip()]
-    return topics_list
+    st.dataframe(absences_df)
 
-# Fonction pour générer une stratégie SEO avec GPT-4
-def generate_seo_strategy(topic):
-    response = openai.ChatCompletion.create(
-        model="gpt-4",  # Utilisez "gpt-4" si possible, sinon "gpt-3.5-turbo"
-        messages=[
-            {"role": "system", "content": "Tu es un expert en SEO. Pour le sujet donné, génère une stratégie SEO détaillée incluant le titre optimisé, la méta description, les mots-clés à utiliser, et des conseils sur la manière de placer les mots-clés dans l'article."},
-            {"role": "user", "content": f"Sujet : {topic}"}
-        ],
-        temperature=0.7,
-        max_tokens=700
-    )
-    strategy = response['choices'][0]['message']['content']
-    return strategy
+# Section 4: Calculate capacity
+st.header("Sprint Capacity")
+if st.session_state["team"] and "absences" in st.session_state:
+    capacity_summary = []
+    for sprint, dates in sprints.items():
+        for member in st.session_state["team"]:
+            member_name = member["Name"]
+            total_days = len(dates)
+            absent_days = len(st.session_state["absences"].get((member_name, sprint), []))
+            available_days = total_days - absent_days
+            capacity_summary.append({"Sprint": sprint, "Member": member_name, "Available Days": available_days})
 
-# Fonction pour générer un article avec GPT-3.5-turbo
-def generate_article(topic, seo_strategy):
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": "Tu es un rédacteur web qui écrit des articles optimisés pour le SEO en suivant la stratégie fournie."},
-            {"role": "user", "content": f"Sujet : {topic}\n\nStratégie SEO : {seo_strategy}\n\nMerci d'écrire un article complet en respectant la stratégie ci-dessus."}
-        ],
-        temperature=0.7,
-        max_tokens=3000
-    )
-    article = response['choices'][0]['message']['content']
-    return article
-
-# Interface utilisateur Streamlit
-def main():
-    st.title("Générateur d'Articles SEO")
-    st.write("Cet outil vous aide à générer des articles optimisés pour le SEO en fonction de la problématique de votre produit.")
-
-    # Étape 1 : Saisie de la problématique
-    problem_statement = st.text_area("Entrez la problématique de votre produit/SaaS :", height=100)
-
-    if st.button("Générer des sujets d'articles"):
-        if problem_statement.strip() != "":
-            # Étape 2 : Analyse de la problématique et génération des mots-clés
-            with st.spinner("Analyse de la problématique et génération des mots-clés..."):
-                keywords = analyze_problem(problem_statement)
-                st.subheader("Mots-clés générés :")
-                st.write(', '.join(keywords))
-
-            # Étape 3 : Génération des sujets d'articles
-            with st.spinner("Génération des sujets d'articles..."):
-                topics = generate_article_topics(keywords)
-                st.subheader("Sujets d'articles proposés :")
-                for idx, topic in enumerate(topics):
-                    st.write(f"{idx+1}. {topic}")
-
-            # Étape 4 : Sélection des sujets favoris
-            st.subheader("Sélectionnez les sujets que vous souhaitez développer :")
-            selected_topics = []
-            for idx, topic in enumerate(topics):
-                if st.checkbox(topic, key=idx):
-                    selected_topics.append(topic)
-
-            if selected_topics:
-                for topic in selected_topics:
-                    # Étape 5 : Génération de la stratégie SEO
-                    with st.spinner(f"Génération de la stratégie SEO pour : {topic}"):
-                        seo_strategy = generate_seo_strategy(topic)
-                        st.markdown(f"### Stratégie SEO pour '{topic}':")
-                        st.write(seo_strategy)
-
-                    # Étape 6 : Génération de l'article
-                    with st.spinner(f"Génération de l'article pour : {topic}"):
-                        article = generate_article(topic, seo_strategy)
-                        st.markdown(f"### Article généré pour '{topic}':")
-                        st.write(article)
-
-                        # Option de téléchargement
-                        st.download_button(
-                            label="Télécharger l'article",
-                            data=article,
-                            file_name=f"{topic}.txt",
-                            mime="text/plain"
-                        )
-            else:
-                st.info("Veuillez sélectionner au moins un sujet pour générer un article.")
-        else:
-            st.warning("Veuillez entrer une problématique avant de continuer.")
-
-if __name__ == "__main__":
-    main()
+    capacity_df = pd.DataFrame(capacity_summary)
+    st.dataframe(capacity_df)
